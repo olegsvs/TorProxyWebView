@@ -1,0 +1,90 @@
+//        releaseVersionCode 9
+buildscript {
+    repositories {
+        google()
+        jcenter()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:3.4.1'
+    }
+}
+/*
+allprojects {
+    repositories {
+        google()
+        jcenter()
+        flatDir {
+            dirs 'libs'
+        }
+    }
+}*/
+
+apply plugin: 'com.android.application'
+
+repositories {
+    google()
+    maven { url 'https://maven.fabric.io/public' }
+}
+
+android {
+    flavorDimensions "default"
+
+    compileSdkVersion 28
+    buildToolsVersion '28.0.3'
+    defaultConfig {
+        applicationId "ru.tor.client"
+        minSdkVersion 16
+        targetSdkVersion 28
+        versionName '9.2.0'
+        versionCode 27
+    }
+    buildTypes {
+        release {
+            minifyEnabled false //for good stack traces
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+    packagingOptions {
+        exclude 'META-INF/DEPENDENCIES'
+        exclude 'META-INF/NOTICE'
+        exclude 'META-INF/LICENSE'
+        exclude 'META-INF/LICENSE.txt'
+        exclude 'META-INF/NOTICE.txt'
+        return void//jut to avoid silly warning
+    }
+}
+
+repositories {
+    google()
+    jcenter()
+    maven { url 'https://jitpack.io' }
+    flatDir {
+        dirs 'libs'
+    }
+}
+
+dependencies {
+    implementation 'com.github.jehy:Tor-Onion-Proxy-Library:0.0.7'
+
+    //use local copy for test
+    //compile 'com.msopentech.thali.toronionproxy.android:ThaliOnionProxyAndroid-debug@aar'
+    //compile fileTree(dir: 'libs', include: ['*.jar'])
+    testImplementation 'junit:junit:4.12'
+    implementation 'com.android.support:appcompat-v7:28.0.0'
+    implementation 'com.android.support.constraint:constraint-layout:1.1.3'
+    implementation 'com.android.support:design:28.0.0'
+    implementation 'com.android.support:cardview-v7:28.0.0'
+
+    implementation "cz.msebera.android:httpclient:4.4.1.2"
+    implementation 'org.slf4j:slf4j-api:1.7.7'
+
+    implementation 'org.slf4j:slf4j-android:1.7.7'
+
+    implementation('com.crashlytics.sdk.android:crashlytics:2.6.5@aar') {
+        transitive = true
+    }
+    implementation('com.crashlytics.sdk.android:answers:1.3.10@aar') {
+        transitive = true
+    }
+}
