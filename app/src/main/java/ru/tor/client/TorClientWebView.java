@@ -3,7 +3,9 @@ package ru.tor.client;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.view.View;
+import android.webkit.CookieSyncManager;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -27,6 +29,12 @@ public class TorClientWebView extends WebView {
         setUpWebView();
     }
 
+    @Override
+    public void postUrl(String url, byte[] postData) {
+        Log.i("IDDQD", "postUrl: " + url);
+        super.postUrl(url, postData);
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     public void setUpWebView() {
         if (this.isInEditMode()) {
@@ -36,14 +44,22 @@ public class TorClientWebView extends WebView {
         TorClientWebViewClient webClient;
         webClient = new TorClientWebViewClient(this.getContext());
         this.setWebViewClient(webClient);
-
+        CookieSyncManager.createInstance(getContext());
+        CookieSyncManager.getInstance().startSync();
+        android.webkit.CookieManager cookieManager = android.webkit.CookieManager.getInstance();
+        cookieManager.setAcceptCookie(true);
+        android.webkit.CookieManager.getInstance().setAcceptThirdPartyCookies(this, true);
         WebSettings webSettings = this.getSettings();
+        webSettings.setAppCacheEnabled(true);
         webSettings.setJavaScriptEnabled(true);
+        webSettings.setDomStorageEnabled(true);
+        webSettings.setDatabaseEnabled(true);
+        webSettings.setLoadsImagesAutomatically(true);
+        webSettings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         webSettings.setBuiltInZoomControls(true);
         webSettings.setDisplayZoomControls(false);
-        webSettings.setDomStorageEnabled(true);
-        webSettings.setUserAgentString("Mozilla/5.0 (Linux; <Android Version>; <Build Tag etc.>) AppleWebKit/<WebKit Rev> (KHTML, like Gecko) Chrome/<Chrome Rev> Mobile Safari/<WebKit Rev>");
-        android.webkit.CookieManager.getInstance().setAcceptCookie(true);
+        webSettings.setUserAgentString("Mozilla/5.0 (Windows NT 6.1; rv:60.0) Gecko/20100101 Firefox/60.0");
+
     }
 
     private void initProgressBar() {

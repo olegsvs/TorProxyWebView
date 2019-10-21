@@ -2,12 +2,20 @@ package ru.tor.client;
 
 import android.app.AlertDialog;
 import android.app.ProgressDialog;
+import android.content.Context;
 import android.content.DialogInterface;
+import android.content.Intent;
+import android.net.Proxy;
 import android.os.AsyncTask;
 import android.os.Build;
+import android.os.Parcelable;
+import android.util.ArrayMap;
 import android.util.Log;
+import android.webkit.WebView;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 
 import static ru.tor.client.TorClientApplication.onionProxyManager;
 
@@ -144,6 +152,12 @@ public class TorProgressTask extends AsyncTask<String, String, Boolean> {
             }
 
             Log.v(TAG, "Tor initialized on port " + onionProxyManager.getIPv4LocalHostSocksPort());
+            try {
+//                setLollipopWebViewProxy(activity.getApplicationContext(), "localhost", onionProxyManager.getIPv4LocalHostSocksPort());
+                //WebkitProxy.setProxy(TorClientApplication.class.getName(), activity.getApplicationContext(), null, "localhost", onionProxyManager.getIPv4LocalHostSocksPort());
+            } catch (Exception e) {
+                Log.i("IDDQD", "doInBackground: " + e.toString());
+            }
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -151,4 +165,56 @@ public class TorProgressTask extends AsyncTask<String, String, Boolean> {
         return true;
     }
 
+
+    /**
+     * Set Proxy for Android 5.0 and above.
+     */
+    @SuppressWarnings("all")
+    private static boolean setLollipopWebViewProxy(Context appContext, String host, int port) {
+        System.setProperty("http.proxyHost", host);
+        System.setProperty("http.proxyPort", port + "");
+        System.setProperty("https.proxyHost", host);
+        System.setProperty("https.proxyPort", port + "");
+        try {
+            Class applictionCls = Class.forName("android.app.Application");
+            Field loadedApkField = applictionCls.getDeclaredField("mLoadedApk");
+            loadedApkField.setAccessible(true);
+            Object loadedApk = loadedApkField.get(appContext);
+            Class loadedApkCls = Class.forName("android.app.LoadedApk");
+            Field receiversField = loadedApkCls.getDeclaredField("mReceivers");
+            receiversField.setAccessible(true);
+            ArrayMap receivers = (ArrayMap) receiversField.get(loadedApk);
+            for (Object receiverMap : receivers.values()) {
+                for (Object rec : ((ArrayMap) receiverMap).keySet()) {
+                    Class clazz = rec.getClass();
+                    if (clazz.getName().contains("ProxyChangeListener")) {
+                        Method onReceiveMethod = clazz.getDeclaredMethod("onReceive", Context.class, Intent.class);
+                        Intent intent = new Intent(Proxy.PROXY_CHANGE_ACTION);
+                        /***** In Lollipop, ProxyProperties went public as ProxyInfo *****/
+                        final String CLASS_NAME = "android.net.ProxyInfo";
+                        Class cls = Class.forName(CLASS_NAME);
+                        /***** ProxyInfo lacks constructors, use the static buildDirectProxy method instead *****/
+                        Method buildDirectProxyMethod = cls.getMethod("buildDirectProxy", String.class, Integer.TYPE);
+                        Object proxyInfo = buildDirectProxyMethod.invoke(cls, host, port);
+                        intent.putExtra("proxy", (Parcelable) proxyInfo);
+                        onReceiveMethod.invoke(rec, appContext, intent);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            Log.e("IDDQD", "Setting proxy with >= 5.0 API failed with " + e.getClass().getName() + ": " + e.getMessage());
+            return false;
+        }
+        Log.d("IDDQD", "Setting proxy with >= 5.0 API successful!");
+        return true;
+    }
+
+    private static Object getFieldValueSafely(Field field, Object classInstance) throws IllegalArgumentException,
+            IllegalAccessException {
+        boolean oldAccessibleValue = field.isAccessible();
+        field.setAccessible(true);
+        Object result = field.get(classInstance);
+        field.setAccessible(oldAccessibleValue);
+        return result;
+    }
 }

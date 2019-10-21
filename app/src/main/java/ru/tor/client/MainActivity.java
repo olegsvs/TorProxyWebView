@@ -17,10 +17,8 @@ import static ru.tor.client.TorClientApplication.onionProxyManager;
 @SuppressLint("SetJavaScriptEnabled")
 public class MainActivity extends AppCompatActivity implements SwipeRefreshLayout.OnRefreshListener {
     private static final String TAG = "MainActivity";
-    static final int FINISH_TORRENT_LOADING = 2;
     private SwipeRefreshLayout mRefresher;
     private WebView mWebView;
-
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -28,7 +26,6 @@ public class MainActivity extends AppCompatActivity implements SwipeRefreshLayou
         setContentView(R.layout.activity_main);
 
         super.onCreate(savedInstanceState);
-        // добавлю модный перезагрузчик страницы
         mRefresher = findViewById(R.id.refreshView);
         mRefresher.setOnRefreshListener(this);
     }
@@ -36,35 +33,14 @@ public class MainActivity extends AppCompatActivity implements SwipeRefreshLayou
     @Override
     public void onResume() {
         super.onResume();
-//        showUpdateDialog.register(this, new IntentFilter(ACTION_SHOW_UPDATE_DIALOG));
         new TorProgressTask(MainActivity.this).execute();
         initWebView();
-//        checkUpdates();
-    }
-
-
-    @Override
-    public void onPause() {
-        super.onPause();
-//        showUpdateDialog.unregister(this);
-    }
-
-    @Override
-    public void onDestroy() {
-        super.onDestroy();
-//        unregisterReceiver(mTorrentLoadReceiver);
-        /*if(onionProxyManager!=null)
-            try {
-                onionProxyManager.stop();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }*/
     }
 
 
     @Override
     public void onRefresh() {
-        //mWebView.reload();
+        mWebView.reload();
         mRefresher.setRefreshing(false);
     }
 
