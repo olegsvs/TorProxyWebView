@@ -85,4 +85,6 @@ dependencies {
         transitive = true
     }
     implementation 'org.jsoup:jsoup:1.7.2'
+
+    implementation("com.squareup.okhttp3:okhttp:4.2.1")
 }

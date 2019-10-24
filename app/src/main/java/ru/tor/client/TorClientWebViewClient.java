@@ -3,27 +3,26 @@ package ru.tor.client;
 import android.content.Context;
 import android.net.Uri;
 import android.util.Log;
+import android.webkit.CookieManager;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.net.URLDecoder;
+import java.net.Proxy;
 import java.net.UnknownHostException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
-import java.util.Set;
+import java.util.zip.GZIPInputStream;
 
 import cz.msebera.android.httpclient.Header;
+import cz.msebera.android.httpclient.HttpHeaders;
 import cz.msebera.android.httpclient.HttpResponse;
-import cz.msebera.android.httpclient.NameValuePair;
 import cz.msebera.android.httpclient.client.HttpClient;
 import cz.msebera.android.httpclient.client.entity.UrlEncodedFormEntity;
 import cz.msebera.android.httpclient.client.methods.HttpPost;
@@ -33,9 +32,12 @@ import cz.msebera.android.httpclient.config.RegistryBuilder;
 import cz.msebera.android.httpclient.conn.DnsResolver;
 import cz.msebera.android.httpclient.conn.socket.ConnectionSocketFactory;
 import cz.msebera.android.httpclient.impl.client.HttpClients;
+import cz.msebera.android.httpclient.impl.client.LaxRedirectStrategy;
 import cz.msebera.android.httpclient.impl.conn.PoolingHttpClientConnectionManager;
-import cz.msebera.android.httpclient.message.BasicNameValuePair;
 import cz.msebera.android.httpclient.ssl.SSLContexts;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
 
 import static ru.tor.client.TorClientApplication.onionProxyManager;
 
@@ -52,10 +54,21 @@ class TorClientWebViewClient extends WebViewClient {
     }
 
     @Override
-    public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
-        return handleRequest(request);
-//        super.shouldInterceptRequest()
+    public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+        view.loadUrl(request.getUrl().toString());
+        return true;
     }
+
+    @Override
+    public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+        WebResourceResponse response = getWebResourceResponse(request.getUrl(), request.getMethod(), request.getRequestHeaders());
+        if (response == null) {
+            return super.shouldInterceptRequest(view, request);
+        } else {
+            return response;
+        }
+    }
+
 
     @Override
     public void onPageFinished(WebView view, String url) {
@@ -79,134 +92,157 @@ class TorClientWebViewClient extends WebViewClient {
                 .build();
         PoolingHttpClientConnectionManager cm = new PoolingHttpClientConnectionManager(reg, new FakeDnsResolver());
         return HttpClients.custom()
+                .setRedirectStrategy(new LaxRedirectStrategy())
                 .setConnectionManager(cm)
                 .build();
     }
 
+    WebResourceResponse getWebResourceResponse(Uri url, String method, Map<String, String> headers) {
 
-    private static Map<String, String> getQueryMap(String query) {
-        String[] params = query.split("&");
-        Map<String, String> map = new HashMap<>();
-        for (String param : params) {
-            String name = param.split("=")[0];
-            String value = param.split("=")[1];
-            map.put(name, value);
-        }
-        return map;
-    }
-
-    public static UrlEncodedFormEntity get2post(Uri url) {
-        Set<String> params = url.getQueryParameterNames();
-        if (params.isEmpty()) {
-            return null;
-        }
-
-        List<NameValuePair> paramsArray = new ArrayList<>();
-
-        Log.d("IDDQD", "Getting URL parameters from URL " + url.toString());
-        //String urlStr = null;
-
-        Map<String, String> map = getQueryMap(url.toString());
-        for (Map.Entry<String, String> entry : map.entrySet()) {
-            String name = entry.getKey();
-            String value = entry.getValue();
-            try {
-                value = URLDecoder.decode(value, "UTF-8");
-            } catch (UnsupportedEncodingException e) {
-                e.printStackTrace();
+        Log.d("IDDQD", "Request for url: " + url + " intercepted method " + method);
+        try {
+            if (url.getHost() == null) {
+                Log.d("IDDQD", "No url or host provided, better let webView deal with it");
+                return null;
             }
-            Log.d("IDDQD", "converting parameter " + name + " to post, value " + value);
-            paramsArray.add(new BasicNameValuePair(name, value));
-        }
-        try {
-            return new UrlEncodedFormEntity(paramsArray, "UTF-8");
-        } catch (UnsupportedEncodingException e) {
-            e.printStackTrace();
-        }
-        return null;
-    }
-
-    private WebResourceResponse handleRequest(WebResourceRequest request) {
-        Log.i("IDDQD", "####");
-        Log.i("IDDQD", "####");
-        Log.i("IDDQD", "####");
-        Log.i("IDDQD", "####");
-        String url = request.getUrl().toString().split("#")[0];
-        Log.i("IDDQD3", "handleRequest: URL " + url + " METHOD " + request.getMethod());
-        try {
-
-            HttpClient httpClient = getNewHttpClient();
-            int port = onionProxyManager.getIPv4LocalHostSocksPort();
-            InetSocketAddress socksaddr = new InetSocketAddress("127.0.0.1", port);
-            HttpClientContext context = HttpClientContext.create();
-            context.setAttribute("socks.address", socksaddr);
-            HttpResponse httpResponse = null;
 
 
+            HttpResponse response;
             UrlEncodedFormEntity params = null;
             String requestUrl = url.toString();
-
-            if (request.getMethod().equals("post")) {
+            if (url.toString().contains("convert_post=1") || method.equalsIgnoreCase("post")) {
                 Log.d("IDDQD", "ProxyProcessor getWebResourceResponse: emulate post");
                 //we need to emulate POST request
+                Log.d("IDDQD", "It is a post request!");
                 int queryPart = requestUrl.indexOf("?");
                 if (queryPart != -1) {
                     requestUrl = requestUrl.substring(0, queryPart);
                 }
-                params = get2post(request.getUrl());
+                params = Utils.get2post(url);
+            }
+            response = executeRequest(requestUrl, headers, params, url.getHost());
+
+            int responseCode = response.getStatusLine().getStatusCode();
+            String responseMessage = response.getStatusLine().getReasonPhrase();
+            Log.i("IDDQD", "getWebResourceResponse: responseCode " + responseCode + " responseMessage " + responseMessage);
+            Header[] cookies = response.getHeaders("set-cookie");
+            if (cookies.length > 0) {
+                String value = cookies[0].getValue();
+                value = value.substring(0, value.indexOf(";"));
+                String authCookie = value.trim();
+                CookieManager cookieManager = CookieManager.getInstance();
+                cookieManager.setCookie(url.getHost(), authCookie);
+                Log.d("IDDQD", "=== Auth cookie: ==='" + value + "'");
+            } else {
+                Log.d("IDDQD", "No cookie received!!!");
             }
 
-            HttpPost httpPost = new HttpPost(requestUrl);
-//            httpPost.setHeader("User-Agent", "Mozilla/5.0 (Windows NT 6.1; rv:60.0) Gecko/20100101 Firefox/60.0");
-//            httpPost.setHeader("X-Compress", "null");
-            if (params != null) {
-                httpPost.setEntity(params);
+            InputStream input = response.getEntity().getContent();
+//            if (responseCode == 200) {
+            String encoding = null;
+            if (response.getEntity().getContentEncoding() != null) {
+                encoding = response.getEntity().getContentEncoding().getValue();
+            }
+            Log.d("IDDQD", "data ok");
+            InputStream inputStream;
+
+            if ("gzip".equals(encoding)) {
+                inputStream = (new GZIPInputStream(input));
+            } else {
+                inputStream = input;
             }
 
-            if (request.getRequestHeaders() != null) {
-                for (Map.Entry<String, String> entry : request.getRequestHeaders().entrySet()) {
-                    httpPost.setHeader(entry.getKey(), entry.getValue());
-                    Log.i("IDDQD2", "handleRequest: " + entry.getKey() + " = " + entry.getValue());
-                }
+            Log.d("IDDQD", "connection encoding : " + encoding);
+            String mime = null;
+            if (response.getEntity() != null && response.getEntity().getContentType() != null && response.getEntity().getContentType().getValue() != null) {
+                mime = response.getEntity().getContentType().getValue();
             }
-            httpResponse = httpClient.execute(httpPost, context);
+            Log.d("IDDQD", "mime full: " + mime);
+            if (mime.contains(";")) {
+                String[] arr = mime.split(";");
+                mime = arr[0];
+                arr = arr[1].split("=");
+                encoding = arr[1];
+                Log.d("IDDQD", "encoding from mime: " + encoding);
+            }
 
-            Header[] all = httpResponse.getAllHeaders();
-            for (Header header1 : all) {
-                Log.d("IDDQD", "LOGIN HEADER: " + header1.getName() + " : " + header1.getValue());
-            }
+            Log.d("IDDQD", "clean mime: " + mime);
+            encoding = ENCODING_UTF_8;
 
-            int responseCode = httpResponse.getStatusLine().getStatusCode();
-            String responseMessage = httpResponse.getStatusLine().getReasonPhrase();
-            Log.i("IDDQD", "handleRequest: first responseCode " + responseCode);
-            Log.i("IDDQD", "handleRequest: first responseMessage " + responseMessage);
+            Log.d("IDDQD", "encoding final: " + encoding);
 
-            InputStream input = httpResponse.getEntity().getContent();
-            String encoding = ENCODING_UTF_8;
-            String mime = httpResponse.getEntity().getContentType().getValue();
-            Log.i("IDDQD", "handleRequest: first MIME " + mime);
-            String mimeType = "text/plain";
-            if (mime != null && !mime.isEmpty()) {
-                mimeType = mime.split("; ")[0];
-            }
-            Map<String, String> responseHeaders = new HashMap<>();
-            for (Header key : httpResponse.getAllHeaders()) {
-                responseHeaders.put(key.getName(), key.getValue());
-            }
-            Log.i("IDDQD", "handleRequest: first HEADERS " + responseHeaders.toString());
-            return new WebResourceResponse(mimeType, encoding, responseCode, responseMessage, responseHeaders, input);
+            //conversions for rutacker
+
+            encoding = ENCODING_UTF_8;
+            String data = Utils.convertStreamToString(inputStream, encoding);
+
+            //convert POST data to GET data to be able ro intercept it
+            String replace = "<form(.*?)method=\"post\"(.*?)>";
+            String replacement = "<form$1method=\"get\"$2><input type=\"hidden\" name=\"convert_post\" value=1>";
+            data = data.replaceAll(replace, replacement);
+
+            inputStream = new ByteArrayInputStream(data.getBytes(encoding));
+
+
+            return createFromString(mime, encoding, inputStream);
+//            }
+            /*else if (responseCode == 301 || responseCode == 302) {
+                String redirect = response.getFirstHeader("Location").getValue();
+                String html = String.format("<html><body onload=\"timer=setTimeout(function(){ window.location='%s';}, 300)\">" +
+                        "you will be redirected soon" +
+                        "</body></html>", redirect);
+                return new WebResourceResponse("text/html", Charset.defaultCharset().name(), new ByteArrayInputStream(html.getBytes()));}*/ //else {
+//                return createResponseError(responseMessage, url.toString(), String.valueOf(responseCode));
+                /*String[] contentTypeParts = response.getEntity().getContentType().getValue().split(";[ ]*");
+                String encoding2 = contentTypeParts.length > 1 && contentTypeParts[1].startsWith("charset=") ? contentTypeParts[1].replaceFirst("charset=", "") : Charset.defaultCharset().name();
+                return new WebResourceResponse(contentTypeParts[0], encoding2, input);
+            }*/
         } catch (Exception e) {
+            Log.d("IDDQD", "Error fetching URL " + url + ":");
             e.printStackTrace();
             try {
-                Log.i("IDDQD", "handleRequest: " + e.toString() + " URL: " + url);
                 return createExceptionError(e, url);
             } catch (UnsupportedEncodingException ex) {
                 ex.printStackTrace();
             }
         }
-        return new WebResourceResponse("text/plain", "UTF-8", 204, "No Content", new HashMap<String, String>(), new ByteArrayInputStream(new byte[]{}));
+        return null;
     }
 
+    private HttpResponse executeRequest(String url, Map<String, String> headers, UrlEncodedFormEntity params, String host) throws IOException {
+        HttpClient httpClient = getNewHttpClient();
+        int port = onionProxyManager.getIPv4LocalHostSocksPort();
+        InetSocketAddress socketAddress = new InetSocketAddress("127.0.0.1", port);
+        HttpClientContext clientContext = HttpClientContext.create();
+        clientContext.setAttribute("socks.address", socketAddress);
+
+        HttpPost request = new HttpPost(url);
+
+        if (params != null) {
+            request.setEntity(params);
+        }
+        if (headers != null) {
+            for (Map.Entry<String, String> entry : headers.entrySet()) {
+                request.setHeader(entry.getKey(), entry.getValue());
+            }
+        }
+
+        request.setHeader(HttpHeaders.ACCEPT, "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8");
+        request.setHeader(HttpHeaders.ACCEPT_ENCODING, "gzip, deflate, sdch");
+        request.setHeader(HttpHeaders.ACCEPT_LANGUAGE, "ru,en-US;q=0.8,en;q=0.6");
+        CookieManager cookieManager = CookieManager.getInstance();
+        String authCookie = cookieManager.getCookie(host);
+        if (authCookie != null) {
+            request.setHeader("Cookie", authCookie);
+            Log.d("IDDQD", "cookie sent:" + authCookie);
+        }
+        //request.setHeader(HttpHeaders.REFERER, "http://rutracker.org/forum/index.php");
+        //request.setHeader(HttpHeaders.USER_AGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/49.0.2623.87 Safari/537.36");
+
+
+        return httpClient.execute(request, clientContext);
+
+    }
 
     private WebResourceResponse createExceptionError(Exception e, Uri url) throws UnsupportedEncodingException {
         return createExceptionError(e, url.toString());

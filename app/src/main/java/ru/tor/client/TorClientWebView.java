@@ -44,22 +44,14 @@ public class TorClientWebView extends WebView {
         TorClientWebViewClient webClient;
         webClient = new TorClientWebViewClient(this.getContext());
         this.setWebViewClient(webClient);
-        CookieSyncManager.createInstance(getContext());
-        CookieSyncManager.getInstance().startSync();
-        android.webkit.CookieManager cookieManager = android.webkit.CookieManager.getInstance();
-        cookieManager.setAcceptCookie(true);
-        android.webkit.CookieManager.getInstance().setAcceptThirdPartyCookies(this, true);
         WebSettings webSettings = this.getSettings();
         webSettings.setAppCacheEnabled(true);
         webSettings.setJavaScriptEnabled(true);
         webSettings.setDomStorageEnabled(true);
         webSettings.setDatabaseEnabled(true);
         webSettings.setLoadsImagesAutomatically(true);
-        webSettings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         webSettings.setBuiltInZoomControls(true);
         webSettings.setDisplayZoomControls(false);
-        webSettings.setUserAgentString("Mozilla/5.0 (Windows NT 6.1; rv:60.0) Gecko/20100101 Firefox/60.0");
-
     }
 
     private void initProgressBar() {

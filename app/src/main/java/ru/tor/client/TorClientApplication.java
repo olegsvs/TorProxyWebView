@@ -11,12 +11,6 @@ public class TorClientApplication extends Application {
     public String currentUrl = TorClient.MAIN_URL;
     private static TorClientApplication instance;
 
-    public int getTorPort() {
-        Log.i("IDDQD", "getTorPort: " + torPort);
-        return torPort;
-    }
-
-    public int torPort = -1;
     @Override
     public void onCreate() {
         super.onCreate();
@@ -36,7 +30,4 @@ public class TorClientApplication extends Application {
         return instance;
     }
 
-    public void setTorPort(int iPv4LocalHostSocksPort) {
-        this.torPort = iPv4LocalHostSocksPort;
-    }
 }
